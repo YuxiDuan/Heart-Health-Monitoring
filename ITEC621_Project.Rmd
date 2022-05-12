@@ -1,0 +1,468 @@
+---
+title: "Heart Failure Prediction"
+author: "Yuxi Duan"
+date: "4/7/2021"
+output: 
+  pdf_document:
+    extra_dependencies: "subfig"
+fontsize: 12pt
+geometry: margin=1in
+header-includes:
+   - \usepackage{setspace}\doublespacing
+   - \usepackage{float}
+fig_caption: yes
+indent: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, echo = F)
+library(tidyverse)
+library(mosaic)
+library(ggthemes)
+library(gridExtra)
+library(car)
+library(performanceEstimation)
+library(InformationValue)
+library(pROC)
+library(e1071)
+library(rpart)
+library(dummies)
+library(class)
+library(rpart)
+library(rpart.plot)
+library(GGally)
+
+heart <- read_csv("heart_failure_clinical_records_dataset.csv", col_types = "nfnfnfnnnffnf")
+```
+
+\pagebreak
+
+## 1. Business Question and Case
+
+### 1.1 Business Question
+
+What factors increase the risk of death due to heart failure?
+
+### 1.2 Business Case
+
+Cardiovascular diseases (CVDs) are the number one cause of death globally, taking an estimated 17.9 million lives each year, which accounts for 31% of all deaths worldwide. Heart failure is a common event caused by CVDs and this dataset contains 12 features that can be used to predict mortality by heart failure. Most cardiovascular diseases can be prevented by addressing behavioral risk factors such as tobacco use, unhealthy diet and obesity, physical inactivity and harmful use of alcohol using population-wide strategies. People with cardiovascular disease or who are at high cardiovascular risk (due to the presence of one or more risk factors such as hypertension, diabetes, hyperlipidemia or already established disease) need early detection and management wherein a machine learning model can be of great help.
+
+## 2.	Analytics Question
+
+### 2.1 Outcome Variable of Interest
+
+Our outcome variable of interest is whether a person died of heart failure. This is represented as a binary variable called “DEATH_EVENT” in our data set, where 0 = no death and 1 = death. 
+
+### 2.2 Main Predictors
+
+The key predictors of our model include demographic information such as age and gender. This will allow us to see which demographic is more likely to die from heart failure. We will also be including health related factors such as if the patient has anemia, high blood pressure, diabetes, as well as if the patient is a smoker. These predictors are important as it will show us which health related variables are more likely to cause heart failure in patients. Knowing these will allow caregivers and doctors know which of their patients are most at risk. We will also be including more specific predictors such as level of creatinine in the blood and level of sodium for example, which will allow us to see more a greater spectrum of patient health. Such predictors are important as they may show how close a patient is to death via heart failure and will allow caregivers to give more precise treatment. 
+
+## 3. Data set Description
+
+For this study, the data set was obtained from Kaggle [1]. This is a data set of 299 patients with heart failure collected at the Faisalabad Institute of Cardiology and at the Allied Hospital in Faisalabad (Punjab, Pakistan), during April – December 2015. The patients consisted of 105 women and 194 men, and their ages range between 40 and 95 years old. All the patients had left ventricular systolic dysfunction and had previous heart failures that put them in classes III or IV of New York Heart Association (NYHA) classification of the stages of heart failure [2].
+
+\singlespacing
+
+## 4. Exploratory Data Analysis
+
+### 4.1 Variables
+
+The data set contains total 299 records with the following 13 variables (Outcome variable - _DEATH_EVENT_):
+
+* **Categorical variables**
+  + *anaemia:* Decrease of red blood cells or hemoglobin; 1 = Yes, 0 = No.
+  + *high_blood_pressure:* If a patient has hypertension; 1 = Yes, 0 = No.
+  + *diabetes:* If the patient has diabetes; 1 = Yes, 0 = No.
+  + *sex:* 1 = Male, 0 = Female.
+  + *smoking:* If the patient smokes; 1 = Yes, 0 = No.
+  + *DEATH_EVENT:* If the patient died during the follow-up period; 1 = Yes, 0 = No.
+* **Quantitative variables**
+  + *age:* Age of the patient in years.
+  + *creatinine_phosphokinase:* Level of the CPK enzyme in the blood in micrograms/L.
+  + *ejection_fraction:* Percentage of blood leaving the heart at each contraction.
+  + *platelets:* Platelets in the blood in kiloplatelets/mL.
+  + *serum_creatinine:* Level of creatinine in the blood in mg/dL.
+  + *serum_sodium:* Level of sodium in the blood in milliequivalents/L.
+  + *time:* Follow-up period in days.
+
+### 4.2 Descriptive Analytics
+
+There are no missing values in the data set, so we do not need to do any imputation. 
+
+_4.2.1 Quick Summary_
+
+```{r eda, out.height="35%", fig.align='center'}
+#Get a quick summary of the data set
+heart %>%
+  summary()
+```
+
+_4.2.2 Binary Variables Distribution_
+
+```{r}
+#Sex
+p1 <- heart %>%
+  ggplot(aes(x = sex)) +
+  geom_bar(fill = "indianred3") +
+  labs(x = "Sex") + 
+  theme_minimal(base_size=10)
+
+#Smoking
+p2 <- heart %>%
+  ggplot(aes(x = smoking)) +
+  geom_bar(fill = "seagreen2") + 
+  labs(x = "Smoking") + 
+  theme_minimal(base_size=10)
+
+#Diabetes
+p3 <- heart %>% 
+  ggplot(aes(x = diabetes)) +
+  geom_bar(fill="orange2") +
+  labs(x="Diabetes Status") + 
+  theme_minimal(base_size=10)
+
+#Anaemia 
+p4 <- heart %>%
+  ggplot(aes(x = anaemia)) +
+  geom_bar(fill="lightblue") + 
+  labs(x = "Anaemia") + 
+  theme_minimal(base_size=10)
+
+#High blood pressure
+p5 <- heart %>%
+  ggplot(aes(x=high_blood_pressure)) +
+  geom_bar(fill="pink2") +
+  labs(x = "High Blood Pressure Status") +
+  theme_minimal(base_size=10)
+
+#Event
+p6 <- heart %>%
+  ggplot(aes(x = DEATH_EVENT)) + 
+  geom_bar(fill="orangered3") + 
+  labs(x = "Event Status") + 
+  theme_minimal(base_size=10)
+
+library(patchwork)
+(p1 + p2 + p3 + p4 + p5 + p6) +
+  plot_annotation(title = "Demographic and Baseline Characteristics Distribution")
+```
+
+_4.2.3 Continuous Variables Distribution_
+
+```{r}
+#Age
+c1 <- heart %>%
+  ggplot(aes(age)) + 
+  geom_histogram(binwidth = 5, colour="white", fill="darkseagreen2", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*5))), colour="darkgreen", fill="darkgreen", alpha=0.3) +
+  scale_x_continuous(breaks=seq(40,100,10)) +
+  geom_vline(xintercept = 65, linetype="dashed") + 
+  annotate("text", x=50, y=45, label="Age <65", size=3, color="dark green") + 
+  annotate("text", x=80, y=45, label="Age >= 65", size=3, color="dark red") + 
+  labs(x = "Age") + 
+  theme_bw()
+
+#CPK
+c2 <- heart %>%
+  ggplot(aes(creatinine_phosphokinase)) +
+  geom_histogram(binwidth=100, colour="white", fill="mediumpurple2", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*150))), colour="mediumorchid1", fill="mediumorchid1", alpha=0.3) +
+  labs(x = "CPK") + 
+  theme_bw()
+
+#Ejection Fraction
+c3 <- heart %>%
+  ggplot(aes(ejection_fraction)) +
+  geom_histogram(binwidth=5, colour="white", fill="lightpink1", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*5))),colour="mistyrose2", fill="mistyrose2", alpha=0.3) +
+  scale_x_continuous(breaks=seq(0,80,10)) +
+  labs(x = "Ejection Fraction") +
+  theme_bw()
+
+#Platelets
+c4 <- heart %>%
+  ggplot(aes(platelets)) + 
+  geom_histogram(binwidth=20000, colour="white", fill="lightskyblue2", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*25000))),colour="lightsteelblue", fill="lightsteelblue", alpha=0.3) +
+  labs(x = "Platelets Count") + 
+  theme_bw()
+
+#Serum Sodium
+c5 <- heart %>%
+  ggplot(aes(serum_sodium)) + 
+  geom_histogram(binwidth=1, colour="white", fill="lightsalmon", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..))),colour="lightcoral", fill="lightcoral", alpha=0.3) +
+  labs(x = "Serum Sodium") + 
+  theme_bw()
+
+#Serum Creatinine
+c6 <- heart %>%
+  ggplot(aes(serum_creatinine)) +
+  geom_histogram(binwidth=0.2, colour="white", fill="lightgoldenrod", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*0.2))),colour="moccasin", fill="moccasin", alpha=0.3) +
+  labs(x = "Serum Creatinine") + 
+  theme_bw()
+
+#Follow-up Period
+c7 <- heart %>%
+  ggplot(aes(time)) +
+  geom_histogram(binwidth=30, colour="white", fill="skyblue", alpha=0.8) +
+  geom_density(eval(bquote(aes(y=..count..*30))), colour="moccasin", fill="moccasin", alpha=0.3) +
+  labs(x = "Follow-up (days)") + 
+  theme_bw()
+
+(c1 + c2 + c3 + c4 + c5 + c6 + c7) +
+  plot_annotation(title = "Age, Lab Test Results and Follow-up Period Distributions")
+```
+
+### 4.3 Correlations
+
+_4.3.1 Correlation Matrix_
+
+From the correlation matrix, we can see _Death Event_ is highly correlated (point-biserial correlation) with follow-up duration, serum creatinine, age, serum sodium, and ejection fraction. 
+
+```{r}
+h1<- read_csv("heart_failure_clinical_records_dataset.csv")
+
+library(corrplot)
+r=cor(h1)
+corrplot(r, order = "hclust", 
+         tl.col = "black", method = "ellipse")
+
+#ggpairs(heart, columns = c(1, 3, 5, 7, 8, 9, 12, 13))
+```
+
+\pagebreak
+### 4.4. Assumption Tests 
+
+### Binomial Logistic Regression Model
+
+Since, our outcome variable (DEATH_EVENT) is binary, the preliminary model that we will use is the logistic regression model.
+
+_4.4.1 Assumptions_
+
+1. The dependent variable is categorical (binary).
+2. The observations are independent of each other.
+3. There is no severe multicollinearity among the explanatory variables.
+4. There are no extreme outliers.
+5. The independent variables are linearly related to the log odds.
+6. The sample size of the dataset is large enough to draw valid conclusions from the fitted logistic regression model.
+
+Out of the above 6 assumptions, the 3rd assumption about multicollinearity will be tested using condition index (CI) and variance inflation factor (VIF). There is no evidence to suggest that the remaining 5 assumptions are violated. 
+
+_4.4.2 Training and Evaluating the Model_
+
+We see based on the p-values in the following summary output, not all of the features in this full model are significant. Variables like age, ejection fraction, serum creatinine and time (follow-up period) are significant (p-values < 0.05), while other predictors such as anaemia, diabetes, high_blood_pressure, platelets, serum_sodium, sex and smoking are not significant (p-values > 0.05).
+
+```{r}
+h_model <- glm(DEATH_EVENT~., family =  binomial(link = "logit"), data = heart)
+
+summary(h_model)
+```
+
+_4.4.3 Dealing with Multi-collinearity_
+
+Multi-collinearity is a problem because it makes it difficult to separate out the impact of individual predictors on response. We evaluate the overall multi-collinearity of the model using Condition Index (CI). If the model suffers from multi-collinearity (i.e. CI > 30), we will identify which predictors contribute the most to this collinearity condition using Variance Inflation Factor (VIF). A VIF of greater than 10 indicates the presence of severe multi-collinearity and requires remediation. 
+
+```{r}
+# Contains the cond.index() function to compute the CI;
+library(klaR) 
+# Contains the vif() function
+library(car)
+cond.index(h_model, data = heart)
+```
+
+From the output, we can see that CI, which is the square root of the ratio of largest to the smallest Eigenvalue of the correlation matrix, is 136.5, much greater than 30, implying severe multi-collinearity. Therefore, we use the VIF to estimate the variance inflation contribution of each predictor.
+
+```{r}
+vif(h_model)
+```
+
+None of the VIF values are greater than 10 (or even 5). It is likely that a predictor is highly correlated with the intercept. We will try centering the data to eliminate the intercept and check again.
+
+### 4.5 Data Pre-processing and Transformations
+
+_4.5.1 Centering_
+
+With centering, only the intercept changes, the $\beta$ coefficients and the p-values do not change.
+
+```{r}
+heart %>%
+  dplyr::select(age, creatinine_phosphokinase, ejection_fraction,
+         platelets, serum_creatinine, serum_sodium,
+         time) %>%
+  scale(center = T, scale = F) %>%
+  data.frame() ->
+  h_centered
+
+heart %>%
+  dplyr::select(anaemia, diabetes, high_blood_pressure,
+         sex, smoking, DEATH_EVENT) %>%
+  cbind(h_centered) ->
+  h_centered
+
+h_centered_model <- glm(DEATH_EVENT~., 
+                        family =  binomial(link = "logit"), 
+                        data = h_centered)
+cond.index(h_centered_model, data = h_centered)
+```
+
+From the CI value of 5.6, we can see that centering helped. The CI came down drastically from the earlier value of 136.5 to 5.6. We can also use other ways to deal with multi-collinearity such as using shrinkage methods (Ridge, LASSO) or dimension reduction methods (PCR, PLS).
+
+_4.5.2 Log Transformation_
+
+Some of the continuous predictors such as CPK and Serum creatinine are right-skewed. One of the ways to make them closer to normal distribution is to take the logarithm. However, we have a sample size of 299 (50+ data points), therefore, the predictors do not have to be normally distributed. Therefore, we leave the continuous predictors without any transformation.
+
+
+
+
+
+
+
+
+```{r}
+library(neuralnet)
+library(tidyverse)
+set.seed(12345)
+heart.train <- heart %>% 
+  sample_frac(0.8)
+heart.test <- heart %>% 
+  anti_join(heart.train)
+```
+
+```{r}
+nn0 = neuralnet(DEATH_EVENT ~ age + time + serum_creatinine + serum_sodium + ejection_fraction, data=heart.train, hidden=0)
+
+plot(nn0, rep="best")
+
+linMod = lm(DEATH_EVENT~., 
+                      data = heart.train, 
+                      mtry = 4, importance = T)
+
+Predict0 = neuralnet::compute(nn0,subset(heart.test,select=c(age,time,serum_creatinine,serum_sodium,ejection_fraction)))
+pr.lm <- predict(linMod, heart.test)
+print(mean((heart.test$DEATH_EVENT - Predict0$net.result)^2))
+print(mean((heart.test$heart.test - pr.lm)^2))
+```
+
+```{r}
+#Introduce a hidden layer to the network that has 5 nodes and a two hidden layers with 5 nodes each. Plot the networks.
+nn5 =neuralnet(DEATH_EVENT ~ age + time + serum_creatinine + serum_sodium + ejection_fraction, 
+               data=heart.train, hidden=5)
+plot(nn5, rep="best")
+
+nn55 =neuralnet(DEATH_EVENT ~ age + time + serum_creatinine + serum_sodium + ejection_fraction, 
+                data=heart.train, hidden=c(5,5))
+plot(nn55, rep="best")
+```
+
+```{r}
+print(mean((heart.test$DEATH_EVENT - Predict0$net.result)^2))
+
+Predict5 = neuralnet::compute(nn5,subset(heart.test,select=c(age,time,serum_creatinine,serum_sodium,ejection_fraction)))
+mean((heart.test$DEATH_EVENT - Predict5$net.result)^2 )
+
+Predict55 = neuralnet::compute(nn55,subset(heart.test,select=c(age,time,serum_creatinine,serum_sodium,ejection_fraction)))
+mean((heart.test$DEATH_EVENT - Predict55$net.result)^2)
+```
+
+
+
+```{r}
+set.seed(12345)
+# The following command will randomly select 60% of the row numbers in the data set to represent the training data
+training<- sample(1:nrow(heart), 0.6*nrow(heart))
+nvars <- ncol(heart)
+
+# The following two commands separate the training data into two objects; one has interest rate removed, the other contains only interest rate
+ht.training <- heart[training,-nvars]
+ht.training.results <- heart[training,nvars]
+
+# The following two commands do the same for the remaining 40% of the data
+ht.test <- heart[-training,-nvars]
+ht.test.results <- heart[-training,nvars]
+
+```
+
+
+```{r}
+# BAGGING
+library(rpart)
+library(tree)
+# Bagging parameters
+bag.proportion <- 0.3 #proportion of training set used for each tree
+bag.numtrees <- 25 #number of trees
+bag.mindev <- 0.005 #controls the size of the trees (higher mindev -> smaller trees)
+
+# Empty lists of trees & predictions that will be populated during the bagging process
+bag.trees <- vector(mode="list",length=bag.numtrees) #creates the empty list of trees
+bag.predictions <- vector(mode="list",length=bag.numtrees) #creates the empty list of prediction vectors
+bagged.predictions <- 0
+
+# The following for loop creates the trees using the Lending Club variables
+for (i in 1:bag.numtrees){
+  set.seed(12345+i) #if we used 12345 every time, we wouldn't get different samples from the training set
+  ht.subset <- heart[sample(training,bag.proportion*length(training)),] #selects a random subset of the training set
+  bag.trees[[i]] <- tree(DEATH_EVENT ~ age + time + serum_creatinine + serum_sodium + ejection_fraction, data=heart, mindev=bag.mindev)
+  bag.predictions[[i]] <- predict(bag.trees[[i]],heart)[-training]
+  bagged.predictions <- bagged.predictions + bag.predictions[[i]] #Keeps a running total of the predictions of the test set
+}
+bagged.predictions = bagged.predictions / bag.numtrees #divides the totals by the # of trees to get the average predictions for the test set
+(mean((ht.test.results-bagged.predictions)^2))^0.5 #computes RMSE
+```
+
+```{r}
+# RANDOM TREES
+
+# Random tree parameters
+rt.vars <- 3 #number of independent variables used in each tree
+rt.numtrees <- 25 #number of trees
+rt.mindev <- 0.005 #controls the size of the trees (higher mindev -> smaller trees)
+
+# Empty lists of trees & predictions that will be populated during the random trees process
+rt.trees <- vector(mode="list",length=rt.numtrees) #creates the empty list of trees
+rt.predictions <- vector(mode="list",length=rt.numtrees) #creates the empty list of prediction vectors
+randomtree.predictions <- 0
+
+# The following for loop creates the trees using the Lending Club variables
+for (i in 1:rt.numtrees){
+  set.seed(12345+i) #if we used 12345 every time, we wouldn't get different subsets of variables
+  ht.subset <- heart[training,sample(1:(nvars-1),rt.vars)] #selects a random subset of the variables
+  ht.subset[,rt.vars+1] <- ht.training.results
+  names(ht.subset)[rt.vars+1] = "int_rate" #this is necessary for the predict function to be able to match variables correctly
+  rt.trees[[i]] <- tree(DEATH_EVENT ~ age + time + serum_creatinine + serum_sodium + ejection_fraction, data=heart, mindev=rt.mindev) #include as many independent variables as are being used
+  rt.predictions[[i]] <- predict(rt.trees[[i]],heart)[-training]
+  randomtree.predictions <- randomtree.predictions + rt.predictions[[i]] #Keeps a running total of the predictions of the test set
+}
+randomtree.predictions = randomtree.predictions / rt.numtrees #divides the totals by the # of trees to get the average predictions for the test set
+(mean((ht.test.results-randomtree.predictions)^2))^0.5 #computes RMSE
+```
+
+
+
+
+
+
+
+
+\doublespacing
+\pagebreak
+## 7. Conclusion
+
+The capability to predict CVD early assumes a vital role for the patient’s appropriate treatment procedure. Machine learning methods are valuable in this early diagnosis of CVD. In the current study, 3 machine learning techniques were applied on a training data set and validated against a test data set; both of these data sets were based on the data collected from the patients at the Faisalabad Institute of Cardiology and at the Allied Hospital in Faisalabad (Punjab, Pakistan). The results of our model implementations show that based on both the measures of future performance - prediction accuracy and the AUC, the logistic regression classifier outperforms the naïve Bayes classifier. One limitation of the current study is that it may only be valid on a similar data set as was used for this study, which was sourced from a very specific location. Further research is needed to check if similar results are seen for data collected elsewhere.
+
+\pagebreak
+## Appendices
+
+### A. Data Information
+
+### B. Visuals, Graphs and Plots
+
+### C. Quantitative R Output
+
+### D. Other
+
+### E. References
+\footnotesize
+1. https://www.kaggle.com/datasets/andrewmvd/heart-failure-clinical-data
+2. Bredy C, Ministeri M, Kempny A, Alonso-Gonzalez R, Swan L, Uebing A, Diller G-P, Gatzoulis MA, Dimopoulos K. New York Heart Association (NYHA) classification in adults with congenital heart disease: relation to objective measures of exercise and outcome. Eur Heart J – Qual Care Clin Outcomes. 2017; 4(1):51–8.
